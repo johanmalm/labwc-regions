@@ -1,8 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #define _POSIX_C_SOURCE 200809L
 #include <ctype.h>
-#include <libxml/parser.h>
-#include <libxml/tree.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -11,11 +9,44 @@
 #include "regions.h"
 #include "scene.h"
 #include "util.h"
+#include "window.h"
 
 static xmlDoc *doc;
 static struct wl_list regions;
-static bool in_region;
+static xmlNode *in_region;
 static struct region *current_region;
+
+
+void
+regions_save(const char *filename, bool pixel_format)
+{
+	struct region *region;
+	wl_list_for_each(region, &regions, link) {
+		xmlAttr *attr = region->node->properties;
+		for (; attr; attr = attr->next) {
+			char buf[32];
+			xmlNode *node = attr->children;
+			if (!strcmp((char *)node->parent->name, "x")) {
+				snprintf(buf, sizeof(buf), "%d", region->box.x);
+			} else if (!strcmp((char *)node->parent->name, "y")) {
+				snprintf(buf, sizeof(buf), "%d", region->box.y);
+			} else if (!strcmp((char *)node->parent->name, "width")) {
+				snprintf(buf, sizeof(buf), "%d", region->box.width);
+			} else if (!strcmp((char *)node->parent->name, "height")) {
+				snprintf(buf, sizeof(buf), "%d", region->box.height);
+			} else {
+				continue;
+			}
+			if (!pixel_format) {
+				strcat(buf, "%");
+			}
+			xmlNodeSetContent(node, (const xmlChar *)buf);
+		}
+	}
+
+	xmlSaveFormatFile(filename, doc, 1);
+}
+
 
 /* Return xpath style nodename, e.g <a><b></b></a> becomes /a/b */
 static char *
@@ -59,6 +90,7 @@ region_create(const char *name)
 {
 	struct region *region = calloc(1, sizeof(struct region));
 	region->name = strdup(name);
+	region->node = in_region;
 	wl_list_insert(regions.prev, &region->link);
 	return region;
 }
@@ -69,18 +101,23 @@ fill_region(char *nodename, char *content)
 	if (!content) {
 		return;
 	}
+
 	if (!strcmp(nodename, "/labwc_config/regions/region/name")) {
 		current_region = region_create(content);
 	} else if (!current_region) {
 		LOG(LOG_ERROR, "expect <region name=\"\"> element first");
 		return;
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/x")) {
+		current_region->ispercentage.x = !!strchr(content, '%');
 		current_region->box.x = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/y")) {
+		current_region->ispercentage.y = !!strchr(content, '%');
 		current_region->box.y = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/width")) {
+		current_region->ispercentage.width = !!strchr(content, '%');
 		current_region->box.width = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/height")) {
+		current_region->ispercentage.height = !!strchr(content, '%');
 		current_region->box.height = atoi(content);
 	}
 }
@@ -131,9 +168,9 @@ xml_tree_walk(xmlNode *node)
 			continue;
 		}
 		if (!strcasecmp((char *)n->name, "region")) {
-			in_region = true;
+			in_region = n;
 			traverse(n);
-			in_region = false;
+			in_region = NULL;
 			continue;
 		}
 		traverse(n);

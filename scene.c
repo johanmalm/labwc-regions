@@ -5,6 +5,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <unistd.h>
 #include <wayland-server.h>
 #include "regions.h"
 #include "scene.h"
@@ -17,6 +18,12 @@
 #define SCALE (1.0)
 
 static struct wl_list *regions;
+
+static struct {
+	int x;
+	int y;
+	struct region *region;
+} grab;
 
 static void
 plot_rect(cairo_t *cairo, struct box *box, uint32_t color, bool fill)
@@ -35,20 +42,74 @@ plot_rect(cairo_t *cairo, struct box *box, uint32_t color, bool fill)
 	cairo_restore(cairo);
 }
 
-struct box
-get_box_in_pixels(struct state *state, struct region *region)
+void
+convert_regions_from_pixels_to_percentage(struct state *state, struct wl_list *regions)
 {
-	struct box box;
-	box.x = region->box.x * state->surface->width / 100;
-	box.y = region->box.y * state->surface->height / 100;
-	box.width = region->box.width * state->surface->width / 100;
-	box.height = region->box.height * state->surface->height / 100;
-	return box;
+	int width = state->surface->width;
+	int height = state->surface->height;
+	struct region *region;
+	wl_list_for_each(region, regions, link) {
+		if (!region->ispercentage.x) {
+			region->box.x *= 100.0;
+			region->box.x /= (float)width;
+		}
+		if (!region->ispercentage.y) {
+			region->box.y *= 100.0;
+			region->box.y /= (float)height;
+		}
+		if (!region->ispercentage.width) {
+			region->box.width *= 100.0;
+			region->box.width /= (float)width;
+		}
+		if (!region->ispercentage.height) {
+			region->box.height *= 100.0;
+			region->box.height /= (float)height;
+		}
+		region->ispercentage = (struct box){ .x = 1, .y = 1, .width = 1, .height = 1 };
+	}
+}
+
+void
+convert_regions_from_percentage_to_pixels(struct state *state, struct wl_list *regions)
+{
+	int width = state->surface->width;
+	int height = state->surface->height;
+	struct region *region;
+	wl_list_for_each(region, regions, link) {
+		if (region->ispercentage.x) {
+			region->box.x *= (float)width;;
+			region->box.x /= 100.0;
+		}
+		if (region->ispercentage.y) {
+			region->box.y *= (float)height;
+			region->box.y /= 100.0;
+		}
+		if (region->ispercentage.width) {
+			region->box.width *= (float)width;
+			region->box.width /= 100.0;
+		}
+		if (region->ispercentage.height) {
+			region->box.height *= (float)height;
+			region->box.height /= 100.0;
+		}
+		region->ispercentage = (struct box){ .x = 0, .y = 0, .width = 0, .height = 0 };
+	}
 }
 
 void
 scene_update(cairo_t *cairo, struct state *state)
 {
+	static bool has_been_converted_from_percentage;
+	if (!has_been_converted_from_percentage) {
+		/*
+		 * scene_update() is never called before the layer-surface is
+		 * configured, so at this point the surface has width/height
+		 * which is what we need to covert from percentages.
+		 */
+		convert_regions_from_percentage_to_pixels(state, regions);
+		has_been_converted_from_percentage = true;
+	}
+
 	/* Clear background */
 	cairo_save(cairo);
 	cairo_set_operator(cairo, CAIRO_OPERATOR_SOURCE);
@@ -67,9 +128,8 @@ scene_update(cairo_t *cairo, struct state *state)
 	set_source_u32(cairo, COLOR_FG);
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
-		struct box box = get_box_in_pixels(state, region);
-		plot_rect(cairo, &box, COLOR_FG, false);
-		cairo_move_to(cairo, box.x + 5, box.y + 5);
+		plot_rect(cairo, &region->box, COLOR_FG, false);
+		cairo_move_to(cairo, region->box.x + 5, region->box.y + 5);
 		render_text(cairo, FONT, SCALE, region->name);
 	}
 }
@@ -80,10 +140,31 @@ scene_init(const char *filename)
 	regions = regions_init(filename);
 }
 
-void
-scene_finish(void)
+static void
+send_signal_to_labwc_pid(int signal)
 {
+	char *labwc_pid = getenv("LABWC_PID");
+	if (!labwc_pid) {
+		exit(EXIT_FAILURE);
+	}
+	int pid = atoi(labwc_pid);
+	if (!pid) {
+		exit(EXIT_FAILURE);
+	}
+	kill(pid, signal);
+}
+
+void
+scene_finish(const char *filename, struct state *state)
+{
+	char *save_in_pixel_format = getenv("REGIONS_PIXEL_FORMAT");
+
+	if (!save_in_pixel_format) {
+		convert_regions_from_pixels_to_percentage(state, regions);
+	}
+	regions_save(filename, !!save_in_pixel_format);
 	regions_finish();
+	send_signal_to_labwc_pid(SIGHUP);
 }
 
 static bool
@@ -105,12 +186,11 @@ box_contains_point(const struct box *box, double x, double y)
 void
 scene_handle_cursor_motion(struct state *state, int x, int y)
 {
-	struct region *region;
-	wl_list_for_each(region, regions, link) {
-		if (!box_contains_point(&region->box, x, y)) {
-			continue;
-		}
-		fprintf(stderr, "in box %p\n", region);
+	if (grab.region) {
+		grab.region->box.x += x - grab.x;
+		grab.region->box.y += y - grab.y;
+		grab.x = x;
+		grab.y = y;
 	}
 	surface_damage(state->surface);
 }
@@ -118,13 +198,26 @@ scene_handle_cursor_motion(struct state *state, int x, int y)
 void
 scene_handle_button_pressed(struct state *state, int x, int y)
 {
-	fprintf(stderr, "button pressed\n");
+	grab.x = x;
+	grab.y = y;
+
+	struct region *region;
+	wl_list_for_each(region, regions, link) {
+		if (box_contains_point(&region->box, x, y)) {
+			grab.region = region;
+			return;
+		}
+	}
 }
 
 void
 scene_handle_button_released(struct state *state, int x, int y)
 {
-	state->run_display = false;
+	if (grab.region) {
+		grab.region = NULL;
+	} else {
+		state->run_display = false;
+	}
 }
 
 void

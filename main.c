@@ -641,7 +641,7 @@ main(int argc, char *argv[])
 		loop_poll(state.eventloop);
 	}
 
-	scene_finish();
+	scene_finish(filename, &state);
 
 	surface_destroy(state.surface);
 	if (state.seat->cursor_theme) {

@@ -15,7 +15,7 @@ struct state;
 
 void scene_update(cairo_t *cairo, struct state *state);
 void scene_init(const char *filename);
-void scene_finish(void);
+void scene_finish(const char *filename, struct state *state);
 
 void scene_handle_cursor_motion(struct state *state, int x, int y);
 void scene_handle_button_pressed(struct state *state, int x, int y);
