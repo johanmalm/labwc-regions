@@ -55,10 +55,10 @@ nodename(xmlNode *node, char *buf, int len)
 }
 
 static struct region *
-region_create(const char *id)
+region_create(const char *name)
 {
 	struct region *region = calloc(1, sizeof(struct region));
-	region->id = strdup(id);
+	region->name = strdup(name);
 	wl_list_insert(regions.prev, &region->link);
 	return region;
 }
@@ -69,10 +69,10 @@ fill_region(char *nodename, char *content)
 	if (!content) {
 		return;
 	}
-	if (!strcmp(nodename, "/labwc_config/regions/region/id")) {
+	if (!strcmp(nodename, "/labwc_config/regions/region/name")) {
 		current_region = region_create(content);
 	} else if (!current_region) {
-		LOG(LOG_ERROR, "expect <region id=\"\"> element first");
+		LOG(LOG_ERROR, "expect <region name=\"\"> element first");
 		return;
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/x")) {
 		current_region->box.x = atoi(content);
@@ -166,7 +166,7 @@ regions_finish(void)
 {
 	struct region *region, *next;
 	wl_list_for_each_safe(region, next, &regions, link) {
-		free(region->id);
+		free(region->name);
 		wl_list_remove(&region->link);
 		free(region);
 	}

@@ -5,7 +5,7 @@
 
 struct region {
 	struct box box;
-	char *id;
+	char *name;
 	struct wl_list link;
 };
 

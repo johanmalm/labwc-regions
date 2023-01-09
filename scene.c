@@ -70,7 +70,7 @@ scene_update(cairo_t *cairo, struct state *state)
 		struct box box = get_box_in_pixels(state, region);
 		plot_rect(cairo, &box, COLOR_FG, false);
 		cairo_move_to(cairo, box.x + 5, box.y + 5);
-		render_text(cairo, FONT, SCALE, region->id);
+		render_text(cairo, FONT, SCALE, region->name);
 	}
 }
 
