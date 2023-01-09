@@ -465,6 +465,7 @@ handle_wl_pointer_frame(void *data, struct wl_pointer *wl_pointer)
 			scene_handle_button_released(seat->state, x, y);
 			break;
 		default:
+			break;
 		}
 	}
 	memset(event, 0, sizeof(struct pointer_event));
