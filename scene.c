@@ -6,7 +6,7 @@
 #include <string.h>
 #include <unistd.h>
 #include <wayland-server.h>
-#include "regions.h"
+#include "settings.h"
 #include "scene.h"
 #include "util.h"
 #include "window.h"
@@ -142,7 +142,7 @@ scene_update(cairo_t *cairo, struct state *state)
 void
 scene_init(const char *filename)
 {
-	regions = regions_init(filename);
+	regions = settings_init(filename);
 }
 
 static void
@@ -163,8 +163,8 @@ void
 scene_finish(const char *filename, struct state *state)
 {
 	convert_regions_from_pixels_to_percentage(state, regions);
-	regions_save(filename);
-	regions_finish();
+	settings_save(filename);
+	settings_finish();
 	send_signal_to_labwc_pid(SIGHUP);
 }
 

@@ -7,7 +7,7 @@
 #include <strings.h>
 #include <unistd.h>
 #include <wayland-server-core.h>
-#include "regions.h"
+#include "settings.h"
 #include "scene.h"
 #include "util.h"
 #include "window.h"
@@ -19,7 +19,7 @@ static struct region *current_region;
 
 
 void
-regions_save(const char *filename)
+settings_save(const char *filename)
 {
 	struct region *region;
 	wl_list_for_each(region, &regions, link) {
@@ -175,7 +175,7 @@ xml_tree_walk(xmlNode *node)
 }
 
 struct wl_list *
-regions_init(const char *filename)
+settings_init(const char *filename)
 {
 	wl_list_init(&regions);
 
@@ -196,7 +196,7 @@ regions_init(const char *filename)
 }
 
 void
-regions_finish(void)
+settings_finish(void)
 {
 	struct region *region, *next;
 	wl_list_for_each_safe(region, next, &regions, link) {

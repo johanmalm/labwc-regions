@@ -64,7 +64,7 @@ dependencies = [
 
 sources = files(
   'main.c',
-  'regions.c',
+  'settings.c',
   'scene.c',
   'util.c',
 )
