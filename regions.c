@@ -18,7 +18,7 @@ static struct region *current_region;
 
 
 void
-regions_save(const char *filename, bool pixel_format)
+regions_save(const char *filename)
 {
 	struct region *region;
 	wl_list_for_each(region, &regions, link) {
@@ -27,23 +27,19 @@ regions_save(const char *filename, bool pixel_format)
 			char buf[32];
 			xmlNode *node = attr->children;
 			if (!strcmp((char *)node->parent->name, "x")) {
-				snprintf(buf, sizeof(buf), "%d", region->box.x);
+				snprintf(buf, sizeof(buf), "%d%%", region->box.x);
 			} else if (!strcmp((char *)node->parent->name, "y")) {
-				snprintf(buf, sizeof(buf), "%d", region->box.y);
+				snprintf(buf, sizeof(buf), "%d%%", region->box.y);
 			} else if (!strcmp((char *)node->parent->name, "width")) {
-				snprintf(buf, sizeof(buf), "%d", region->box.width);
+				snprintf(buf, sizeof(buf), "%d%%", region->box.width);
 			} else if (!strcmp((char *)node->parent->name, "height")) {
-				snprintf(buf, sizeof(buf), "%d", region->box.height);
+				snprintf(buf, sizeof(buf), "%d%%", region->box.height);
 			} else {
 				continue;
-			}
-			if (!pixel_format) {
-				strcat(buf, "%");
 			}
 			xmlNodeSetContent(node, (const xmlChar *)buf);
 		}
 	}
-
 	xmlSaveFormatFile(filename, doc, 1);
 }
 

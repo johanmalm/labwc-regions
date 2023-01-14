@@ -17,6 +17,6 @@ struct region {
 
 struct wl_list *regions_init(const char *filename);
 void regions_finish(void);
-void regions_save(const char *filename, bool pixel_format);
+void regions_save(const char *filename);
 
 #endif /* REGIONS_H */

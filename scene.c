@@ -157,12 +157,8 @@ send_signal_to_labwc_pid(int signal)
 void
 scene_finish(const char *filename, struct state *state)
 {
-	char *save_in_pixel_format = getenv("REGIONS_PIXEL_FORMAT");
-
-	if (!save_in_pixel_format) {
-		convert_regions_from_pixels_to_percentage(state, regions);
-	}
-	regions_save(filename, !!save_in_pixel_format);
+	convert_regions_from_pixels_to_percentage(state, regions);
+	regions_save(filename);
 	regions_finish();
 	send_signal_to_labwc_pid(SIGHUP);
 }
