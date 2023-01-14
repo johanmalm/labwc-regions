@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #define _POSIX_C_SOURCE 200809L
 #include <ctype.h>
+#include <math.h>
 #include <stdio.h>
 #include <string.h>
 #include <strings.h>
@@ -27,13 +28,13 @@ regions_save(const char *filename)
 			char buf[32];
 			xmlNode *node = attr->children;
 			if (!strcmp((char *)node->parent->name, "x")) {
-				snprintf(buf, sizeof(buf), "%d%%", region->box.x);
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.x));
 			} else if (!strcmp((char *)node->parent->name, "y")) {
-				snprintf(buf, sizeof(buf), "%d%%", region->box.y);
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.y));
 			} else if (!strcmp((char *)node->parent->name, "width")) {
-				snprintf(buf, sizeof(buf), "%d%%", region->box.width);
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.width));
 			} else if (!strcmp((char *)node->parent->name, "height")) {
-				snprintf(buf, sizeof(buf), "%d%%", region->box.height);
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.height));
 			} else {
 				continue;
 			}
@@ -105,16 +106,16 @@ fill_region(char *nodename, char *content)
 		return;
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/x")) {
 		current_region->ispercentage.x = !!strchr(content, '%');
-		current_region->box.x = atoi(content);
+		current_region->fbox.x = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/y")) {
 		current_region->ispercentage.y = !!strchr(content, '%');
-		current_region->box.y = atoi(content);
+		current_region->fbox.y = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/width")) {
 		current_region->ispercentage.width = !!strchr(content, '%');
-		current_region->box.width = atoi(content);
+		current_region->fbox.width = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/height")) {
 		current_region->ispercentage.height = !!strchr(content, '%');
-		current_region->box.height = atoi(content);
+		current_region->fbox.height = atoi(content);
 	}
 }
 

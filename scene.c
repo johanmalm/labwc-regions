@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #define _POSIX_C_SOURCE 200809L
 #include <cairo.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +25,7 @@ static struct {
 } grab;
 
 static void
-plot_rect(cairo_t *cairo, struct box *box, uint32_t color, bool fill)
+plot_rect(cairo_t *cairo, struct fbox *box, uint32_t color, bool fill)
 {
 	double thickness = fill ? 0.0 : 1.0;
 	cairo_save(cairo);
@@ -45,54 +44,60 @@ plot_rect(cairo_t *cairo, struct box *box, uint32_t color, bool fill)
 void
 convert_regions_from_pixels_to_percentage(struct state *state, struct wl_list *regions)
 {
-	int width = state->surface->width;
-	int height = state->surface->height;
+	double width = (double)state->surface->width;
+	double height = (double)state->surface->height;
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
 		if (!region->ispercentage.x) {
-			region->box.x *= 100.0;
-			region->box.x /= (float)width;
+			region->fbox.x *= 100.0;
+			region->fbox.x /= width;
+			region->ispercentage.x = true;
 		}
 		if (!region->ispercentage.y) {
-			region->box.y *= 100.0;
-			region->box.y /= (float)height;
+			region->fbox.y *= 100.0;
+			region->fbox.y /= height;
+			region->ispercentage.y = true;
 		}
 		if (!region->ispercentage.width) {
-			region->box.width *= 100.0;
-			region->box.width /= (float)width;
+			region->fbox.width *= 100.0;
+			region->fbox.width /= width;
+			region->ispercentage.width = true;
 		}
 		if (!region->ispercentage.height) {
-			region->box.height *= 100.0;
-			region->box.height /= (float)height;
+			region->fbox.height *= 100.0;
+			region->fbox.height /= height;
+			region->ispercentage.height = true;
 		}
-		region->ispercentage = (struct box){ .x = 1, .y = 1, .width = 1, .height = 1 };
 	}
 }
 
 void
 convert_regions_from_percentage_to_pixels(struct state *state, struct wl_list *regions)
 {
-	int width = state->surface->width;
-	int height = state->surface->height;
+	double width = state->surface->width;
+	double height = state->surface->height;
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
 		if (region->ispercentage.x) {
-			region->box.x *= (float)width;;
-			region->box.x /= 100.0;
+			region->fbox.x *= width;;
+			region->fbox.x /= 100.0;
+			region->ispercentage.x = false;
 		}
 		if (region->ispercentage.y) {
-			region->box.y *= (float)height;
-			region->box.y /= 100.0;
+			region->fbox.y *= height;
+			region->fbox.y /= 100.0;
+			region->ispercentage.y = false;
 		}
 		if (region->ispercentage.width) {
-			region->box.width *= (float)width;
-			region->box.width /= 100.0;
+			region->fbox.width *= width;
+			region->fbox.width /= 100.0;
+			region->ispercentage.width = false;
 		}
 		if (region->ispercentage.height) {
-			region->box.height *= (float)height;
-			region->box.height /= 100.0;
+			region->fbox.height *= height;
+			region->fbox.height /= 100.0;
+			region->ispercentage.height = false;
 		}
-		region->ispercentage = (struct box){ .x = 0, .y = 0, .width = 0, .height = 0 };
 	}
 }
 
@@ -118,7 +123,7 @@ scene_update(cairo_t *cairo, struct state *state)
 	cairo_restore(cairo);
 
 	/* background */
-	struct box box = {
+	struct fbox box = {
 		.width = state->surface->width,
 		.height = state->surface->height,
 	};
@@ -128,8 +133,8 @@ scene_update(cairo_t *cairo, struct state *state)
 	set_source_u32(cairo, COLOR_FG);
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
-		plot_rect(cairo, &region->box, COLOR_FG, false);
-		cairo_move_to(cairo, region->box.x + 5, region->box.y + 5);
+		plot_rect(cairo, &region->fbox, COLOR_FG, false);
+		cairo_move_to(cairo, region->fbox.x + 5, region->fbox.y + 5);
 		render_text(cairo, FONT, SCALE, region->name);
 	}
 }
@@ -164,13 +169,13 @@ scene_finish(const char *filename, struct state *state)
 }
 
 static bool
-box_empty(const struct box *box)
+box_empty(const struct fbox *box)
 {
 	return !box || box->width <= 0 || box->height <= 0;
 }
 
 static bool
-box_contains_point(const struct box *box, double x, double y)
+box_contains_point(const struct fbox *box, double x, double y)
 {
 	if (box_empty(box)) {
 		return false;
@@ -183,8 +188,8 @@ void
 scene_handle_cursor_motion(struct state *state, int x, int y)
 {
 	if (grab.region) {
-		grab.region->box.x += x - grab.x;
-		grab.region->box.y += y - grab.y;
+		grab.region->fbox.x += x - grab.x;
+		grab.region->fbox.y += y - grab.y;
 		grab.x = x;
 		grab.y = y;
 	}
@@ -199,7 +204,7 @@ scene_handle_button_pressed(struct state *state, int x, int y)
 
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
-		if (box_contains_point(&region->box, x, y)) {
+		if (box_contains_point(&region->fbox, x, y)) {
 			grab.region = region;
 			return;
 		}

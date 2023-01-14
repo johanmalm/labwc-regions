@@ -15,6 +15,9 @@ add_project_arguments(
   language: 'c',
 )
 
+cc = meson.get_compiler('c')
+math = cc.find_library('m')
+
 wayland_client = dependency('wayland-client', version: '>=1.20.0')
 wayland_cursor = dependency('wayland-cursor')
 wayland_protos = dependency('wayland-protocols')
@@ -51,6 +54,7 @@ endforeach
 
 dependencies = [
   cairo,
+  math,
   pangocairo,
   xkbcommon,
   wayland_client,

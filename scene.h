@@ -2,13 +2,21 @@
 #ifndef SCENE_H
 #define SCENE_H
 #include <cairo.h>
+#include <stdbool.h>
 #include <xkbcommon/xkbcommon.h>
 
-struct box {
-	int x;
-	int y;
-	int width;
-	int height;
+struct fbox {
+	double x;
+	double y;
+	double width;
+	double height;
+};
+
+struct bbox {
+	bool x;
+	bool y;
+	bool width;
+	bool height;
 };
 
 struct state;

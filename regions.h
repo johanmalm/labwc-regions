@@ -6,8 +6,8 @@
 #include "scene.h"
 
 struct region {
-	struct box box;
-	struct box ispercentage;
+	struct fbox fbox;
+	struct bbox ispercentage;
 
 	char *name;
 
