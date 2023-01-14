@@ -28,13 +28,13 @@ regions_save(const char *filename)
 			char buf[32];
 			xmlNode *node = attr->children;
 			if (!strcmp((char *)node->parent->name, "x")) {
-				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.x));
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->dbox.x));
 			} else if (!strcmp((char *)node->parent->name, "y")) {
-				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.y));
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->dbox.y));
 			} else if (!strcmp((char *)node->parent->name, "width")) {
-				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.width));
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->dbox.width));
 			} else if (!strcmp((char *)node->parent->name, "height")) {
-				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->fbox.height));
+				snprintf(buf, sizeof(buf), "%d%%", (int)round(region->dbox.height));
 			} else {
 				continue;
 			}
@@ -106,16 +106,16 @@ fill_region(char *nodename, char *content)
 		return;
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/x")) {
 		current_region->ispercentage.x = !!strchr(content, '%');
-		current_region->fbox.x = atoi(content);
+		current_region->dbox.x = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/y")) {
 		current_region->ispercentage.y = !!strchr(content, '%');
-		current_region->fbox.y = atoi(content);
+		current_region->dbox.y = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/width")) {
 		current_region->ispercentage.width = !!strchr(content, '%');
-		current_region->fbox.width = atoi(content);
+		current_region->dbox.width = atoi(content);
 	} else if (!strcmp(nodename, "/labwc_config/regions/region/height")) {
 		current_region->ispercentage.height = !!strchr(content, '%');
-		current_region->fbox.height = atoi(content);
+		current_region->dbox.height = atoi(content);
 	}
 }
 

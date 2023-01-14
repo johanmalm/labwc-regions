@@ -25,7 +25,7 @@ static struct {
 } grab;
 
 static void
-plot_rect(cairo_t *cairo, struct fbox *box, uint32_t color, bool fill)
+plot_rect(cairo_t *cairo, struct dbox *box, uint32_t color, bool fill)
 {
 	double thickness = fill ? 0.0 : 1.0;
 	cairo_save(cairo);
@@ -49,23 +49,23 @@ convert_regions_from_pixels_to_percentage(struct state *state, struct wl_list *r
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
 		if (!region->ispercentage.x) {
-			region->fbox.x *= 100.0;
-			region->fbox.x /= width;
+			region->dbox.x *= 100.0;
+			region->dbox.x /= width;
 			region->ispercentage.x = true;
 		}
 		if (!region->ispercentage.y) {
-			region->fbox.y *= 100.0;
-			region->fbox.y /= height;
+			region->dbox.y *= 100.0;
+			region->dbox.y /= height;
 			region->ispercentage.y = true;
 		}
 		if (!region->ispercentage.width) {
-			region->fbox.width *= 100.0;
-			region->fbox.width /= width;
+			region->dbox.width *= 100.0;
+			region->dbox.width /= width;
 			region->ispercentage.width = true;
 		}
 		if (!region->ispercentage.height) {
-			region->fbox.height *= 100.0;
-			region->fbox.height /= height;
+			region->dbox.height *= 100.0;
+			region->dbox.height /= height;
 			region->ispercentage.height = true;
 		}
 	}
@@ -79,23 +79,23 @@ convert_regions_from_percentage_to_pixels(struct state *state, struct wl_list *r
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
 		if (region->ispercentage.x) {
-			region->fbox.x *= width;;
-			region->fbox.x /= 100.0;
+			region->dbox.x *= width;;
+			region->dbox.x /= 100.0;
 			region->ispercentage.x = false;
 		}
 		if (region->ispercentage.y) {
-			region->fbox.y *= height;
-			region->fbox.y /= 100.0;
+			region->dbox.y *= height;
+			region->dbox.y /= 100.0;
 			region->ispercentage.y = false;
 		}
 		if (region->ispercentage.width) {
-			region->fbox.width *= width;
-			region->fbox.width /= 100.0;
+			region->dbox.width *= width;
+			region->dbox.width /= 100.0;
 			region->ispercentage.width = false;
 		}
 		if (region->ispercentage.height) {
-			region->fbox.height *= height;
-			region->fbox.height /= 100.0;
+			region->dbox.height *= height;
+			region->dbox.height /= 100.0;
 			region->ispercentage.height = false;
 		}
 	}
@@ -123,7 +123,7 @@ scene_update(cairo_t *cairo, struct state *state)
 	cairo_restore(cairo);
 
 	/* background */
-	struct fbox box = {
+	struct dbox box = {
 		.width = state->surface->width,
 		.height = state->surface->height,
 	};
@@ -133,8 +133,8 @@ scene_update(cairo_t *cairo, struct state *state)
 	set_source_u32(cairo, COLOR_FG);
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
-		plot_rect(cairo, &region->fbox, COLOR_FG, false);
-		cairo_move_to(cairo, region->fbox.x + 5, region->fbox.y + 5);
+		plot_rect(cairo, &region->dbox, COLOR_FG, false);
+		cairo_move_to(cairo, region->dbox.x + 5, region->dbox.y + 5);
 		render_text(cairo, FONT, SCALE, region->name);
 	}
 }
@@ -169,13 +169,13 @@ scene_finish(const char *filename, struct state *state)
 }
 
 static bool
-box_empty(const struct fbox *box)
+box_empty(const struct dbox *box)
 {
 	return !box || box->width <= 0 || box->height <= 0;
 }
 
 static bool
-box_contains_point(const struct fbox *box, double x, double y)
+box_contains_point(const struct dbox *box, double x, double y)
 {
 	if (box_empty(box)) {
 		return false;
@@ -188,8 +188,8 @@ void
 scene_handle_cursor_motion(struct state *state, int x, int y)
 {
 	if (grab.region) {
-		grab.region->fbox.x += x - grab.x;
-		grab.region->fbox.y += y - grab.y;
+		grab.region->dbox.x += x - grab.x;
+		grab.region->dbox.y += y - grab.y;
 		grab.x = x;
 		grab.y = y;
 	}
@@ -204,7 +204,7 @@ scene_handle_button_pressed(struct state *state, int x, int y)
 
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
-		if (box_contains_point(&region->fbox, x, y)) {
+		if (box_contains_point(&region->dbox, x, y)) {
 			grab.region = region;
 			return;
 		}

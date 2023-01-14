@@ -5,20 +5,6 @@
 #include <stdbool.h>
 #include <xkbcommon/xkbcommon.h>
 
-struct fbox {
-	double x;
-	double y;
-	double width;
-	double height;
-};
-
-struct bbox {
-	bool x;
-	bool y;
-	bool width;
-	bool height;
-};
-
 struct state;
 
 void scene_update(cairo_t *cairo, struct state *state);
