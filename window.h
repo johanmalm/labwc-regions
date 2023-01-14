@@ -12,7 +12,7 @@
 struct loop_timer;
 struct zwlr_layer_shell_v1;
 
-struct state {
+struct window {
 	struct seat *seat;
 
 	bool run_display;
@@ -28,7 +28,7 @@ struct state {
 };
 
 struct output {
-	struct state *state;
+	struct window *window;
 
 	char *name;
 	struct wl_output *wl_output;
@@ -64,7 +64,7 @@ struct pointer_event {
 };
 
 struct seat {
-	struct state *state;
+	struct window *window;
 
 	struct wl_pointer *pointer;
 	struct wl_surface *cursor_surface;
@@ -87,7 +87,7 @@ struct seat {
 };
 
 struct surface {
-	struct state *state;
+	struct window *window;
 
 	cairo_surface_t *image;
 	struct wl_output *wl_output;

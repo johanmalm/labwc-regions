@@ -42,10 +42,10 @@ plot_rect(cairo_t *cairo, struct dbox *box, uint32_t color, bool fill)
 }
 
 void
-convert_regions_from_pixels_to_percentage(struct state *state, struct wl_list *regions)
+convert_regions_from_pixels_to_percentage(struct window *window, struct wl_list *regions)
 {
-	double width = (double)state->surface->width;
-	double height = (double)state->surface->height;
+	double width = (double)window->surface->width;
+	double height = (double)window->surface->height;
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
 		if (!region->ispercentage.x) {
@@ -72,10 +72,10 @@ convert_regions_from_pixels_to_percentage(struct state *state, struct wl_list *r
 }
 
 void
-convert_regions_from_percentage_to_pixels(struct state *state, struct wl_list *regions)
+convert_regions_from_percentage_to_pixels(struct window *window, struct wl_list *regions)
 {
-	double width = state->surface->width;
-	double height = state->surface->height;
+	double width = window->surface->width;
+	double height = window->surface->height;
 	struct region *region;
 	wl_list_for_each(region, regions, link) {
 		if (region->ispercentage.x) {
@@ -102,7 +102,7 @@ convert_regions_from_percentage_to_pixels(struct state *state, struct wl_list *r
 }
 
 void
-scene_update(cairo_t *cairo, struct state *state)
+scene_update(cairo_t *cairo, struct window *window)
 {
 	static bool has_been_converted_from_percentage;
 	if (!has_been_converted_from_percentage) {
@@ -111,7 +111,7 @@ scene_update(cairo_t *cairo, struct state *state)
 		 * configured, so at this point the surface has width/height
 		 * which is what we need to covert from percentages.
 		 */
-		convert_regions_from_percentage_to_pixels(state, regions);
+		convert_regions_from_percentage_to_pixels(window, regions);
 		has_been_converted_from_percentage = true;
 	}
 
@@ -124,8 +124,8 @@ scene_update(cairo_t *cairo, struct state *state)
 
 	/* background */
 	struct dbox box = {
-		.width = state->surface->width,
-		.height = state->surface->height,
+		.width = window->surface->width,
+		.height = window->surface->height,
 	};
 	plot_rect(cairo, &box, COLOR_BG, true);
 
@@ -160,9 +160,9 @@ send_signal_to_labwc_pid(int signal)
 }
 
 void
-scene_finish(const char *filename, struct state *state)
+scene_finish(const char *filename, struct window *window)
 {
-	convert_regions_from_pixels_to_percentage(state, regions);
+	convert_regions_from_pixels_to_percentage(window, regions);
 	settings_save(filename);
 	settings_finish();
 	send_signal_to_labwc_pid(SIGHUP);
@@ -185,7 +185,7 @@ box_contains_point(const struct dbox *box, double x, double y)
 }
 
 void
-scene_handle_cursor_motion(struct state *state, int x, int y)
+scene_handle_cursor_motion(struct window *window, int x, int y)
 {
 	if (grab.region) {
 		grab.region->dbox.x += x - grab.x;
@@ -193,11 +193,11 @@ scene_handle_cursor_motion(struct state *state, int x, int y)
 		grab.x = x;
 		grab.y = y;
 	}
-	surface_damage(state->surface);
+	surface_damage(window->surface);
 }
 
 void
-scene_handle_button_pressed(struct state *state, int x, int y)
+scene_handle_button_pressed(struct window *window, int x, int y)
 {
 	grab.x = x;
 	grab.y = y;
@@ -212,17 +212,17 @@ scene_handle_button_pressed(struct state *state, int x, int y)
 }
 
 void
-scene_handle_button_released(struct state *state, int x, int y)
+scene_handle_button_released(struct window *window, int x, int y)
 {
 	if (grab.region) {
 		grab.region = NULL;
 	} else {
-		state->run_display = false;
+		window->run_display = false;
 	}
 }
 
 void
-scene_handle_key(struct state *state, xkb_keysym_t keysym, uint32_t codepoint)
+scene_handle_key(struct window *window, xkb_keysym_t keysym, uint32_t codepoint)
 {
 	switch (keysym) {
 	case XKB_KEY_Up:
@@ -231,10 +231,10 @@ scene_handle_key(struct state *state, xkb_keysym_t keysym, uint32_t codepoint)
 	case XKB_KEY_Left:
 		break;
 	case XKB_KEY_Escape:
-		state->run_display = false;
+		window->run_display = false;
 		break;
 	default:
 		break;
 	}
-	surface_damage(state->surface);
+	surface_damage(window->surface);
 }

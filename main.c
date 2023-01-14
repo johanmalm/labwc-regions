@@ -16,7 +16,7 @@
 #include "window.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
 
-static struct state state = { 0 };
+static struct window window = { 0 };
 
 static void
 surface_destroy(struct surface *surface)
@@ -41,12 +41,12 @@ surface_is_configured(struct surface *surface)
 void
 render_frame(struct surface *surface)
 {
-	struct state *state = surface->state;
+	struct window *window = surface->window;
 
 	if (!surface_is_configured(surface)) {
 		return;
 	}
-	struct pool_buffer *buffer = get_next_buffer(state->shm,
+	struct pool_buffer *buffer = get_next_buffer(window->shm,
 		surface->buffers, surface->width, surface->height);
 	if (!buffer) {
 		return;
@@ -56,7 +56,7 @@ render_frame(struct surface *surface)
 	cairo_set_antialias(cairo, CAIRO_ANTIALIAS_BEST);
 	cairo_identity_matrix(cairo);
 
-	scene_update(cairo, state);
+	scene_update(cairo, window);
 
 	wl_surface_attach(surface->surface, buffer->buffer, 0, 0);
 	wl_surface_damage_buffer(surface->surface, 0, 0, INT32_MAX, INT32_MAX);
@@ -89,11 +89,11 @@ static const struct zwlr_layer_surface_v1_listener layer_surface_listener = {
 static void
 surface_layer_surface_create(struct surface *surface)
 {
-	struct state *state = surface->state;
+	struct window *window = surface->window;
 
 	assert(surface->surface);
 	surface->layer_surface = zwlr_layer_shell_v1_get_layer_surface(
-		state->layer_shell, surface->surface, surface->wl_output,
+		window->layer_shell, surface->surface, surface->wl_output,
 		ZWLR_LAYER_SHELL_V1_LAYER_TOP, "regions");
 	assert(surface->layer_surface);
 
@@ -158,8 +158,8 @@ handle_wl_output_geometry(void *data, struct wl_output *wl_output,
 {
 	struct output *output = data;
 	output->subpixel = subpixel;
-	if (output->state->run_display) {
-		surface_damage(output->state->surface);
+	if (output->window->run_display) {
+		surface_damage(output->window->surface);
 	}
 }
 
@@ -181,8 +181,8 @@ handle_wl_output_scale(void *data, struct wl_output *wl_output, int32_t factor)
 {
 	struct output *output = data;
 	output->scale = factor;
-	if (output->state->run_display) {
-		surface_damage(output->state->surface);
+	if (output->window->run_display) {
+		surface_damage(output->window->surface);
 	}
 }
 
@@ -210,14 +210,14 @@ static struct wl_output_listener output_listener = {
 };
 
 static void
-output_init(struct state *state, struct wl_output *wl_output)
+output_init(struct window *window, struct wl_output *wl_output)
 {
 	struct output *output = calloc(1, sizeof(struct output));
-	output->state = state;
+	output->window = window;
 	output->wl_output = wl_output;
 	output->scale = 1;
 	wl_output_add_listener(output->wl_output, &output_listener, output);
-	wl_list_insert(&state->outputs, &output->link);
+	wl_list_insert(&window->outputs, &output->link);
 }
 
 static void
@@ -268,10 +268,10 @@ static void
 keyboard_repeat(void *data)
 {
 	struct seat *seat = data;
-	struct state *state = seat->state;
-	seat->repeat_timer = loop_add_timer(state->eventloop,
+	struct window *window = seat->window;
+	seat->repeat_timer = loop_add_timer(window->eventloop,
 		seat->repeat_period_ms, keyboard_repeat, seat);
-	scene_handle_key(state, seat->repeat_sym, seat->repeat_codepoint);
+	scene_handle_key(window, seat->repeat_sym, seat->repeat_codepoint);
 }
 
 static void
@@ -279,25 +279,25 @@ handle_wl_keyboard_key(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t serial, uint32_t time, uint32_t key, uint32_t _state)
 {
 	struct seat *seat = data;
-	struct state *state = seat->state;
+	struct window *window = seat->window;
 	enum wl_keyboard_key_state key_state = _state;
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(seat->xkb.state, key + 8);
 	uint32_t keycode = key_state == WL_KEYBOARD_KEY_STATE_PRESSED ?
 		key + 8 : 0;
 	uint32_t codepoint = xkb_state_key_get_utf32(seat->xkb.state, keycode);
 	if (key_state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-		scene_handle_key(state, sym, codepoint);
+		scene_handle_key(window, sym, codepoint);
 	}
 
 	if (seat->repeat_timer) {
-		loop_remove_timer(seat->state->eventloop, seat->repeat_timer);
+		loop_remove_timer(seat->window->eventloop, seat->repeat_timer);
 		seat->repeat_timer = NULL;
 	}
 	bool pressed = key_state == WL_KEYBOARD_KEY_STATE_PRESSED;
 	if (pressed && seat->repeat_period_ms > 0) {
 		seat->repeat_sym = sym;
 		seat->repeat_codepoint = codepoint;
-		seat->repeat_timer = loop_add_timer(seat->state->eventloop,
+		seat->repeat_timer = loop_add_timer(seat->window->eventloop,
 			seat->repeat_delay_ms, keyboard_repeat, seat);
 	}
 }
@@ -340,9 +340,9 @@ static const struct wl_keyboard_listener keyboard_listener = {
 static void
 update_cursor(struct seat *seat, uint32_t serial)
 {
-	struct state *state = seat->state;
+	struct window *window = seat->window;
 	seat->cursor_theme =
-		wl_cursor_theme_load(getenv("XCURSOR_THEME"), 24, state->shm);
+		wl_cursor_theme_load(getenv("XCURSOR_THEME"), 24, window->shm);
 	struct wl_cursor *cursor =
 		wl_cursor_theme_get_cursor(seat->cursor_theme, "left_ptr");
 	struct wl_cursor_image *cursor_image = cursor->images[0];
@@ -450,7 +450,7 @@ handle_wl_pointer_frame(void *data, struct wl_pointer *wl_pointer)
 	if (event->event_mask & POINTER_EVENT_MOTION) {
 		seat->pointer_x = wl_fixed_to_int(event->surface_x);
 		seat->pointer_y = wl_fixed_to_int(event->surface_y);
-		scene_handle_cursor_motion(seat->state,
+		scene_handle_cursor_motion(seat->window,
 			seat->pointer_x, seat->pointer_y);
 	}
 
@@ -459,17 +459,17 @@ handle_wl_pointer_frame(void *data, struct wl_pointer *wl_pointer)
 		int y = seat->pointer_y;
 		switch (event->state) {
 		case WL_POINTER_BUTTON_STATE_PRESSED:
-			scene_handle_button_pressed(seat->state, x, y);
+			scene_handle_button_pressed(seat->window, x, y);
 			break;
 		case WL_POINTER_BUTTON_STATE_RELEASED:
-			scene_handle_button_released(seat->state, x, y);
+			scene_handle_button_released(seat->window, x, y);
 			break;
 		default:
 			break;
 		}
 	}
 	memset(event, 0, sizeof(struct pointer_event));
-	surface_damage(seat->state->surface);
+	surface_damage(seat->window->surface);
 }
 
 static const struct wl_pointer_listener pointer_listener = {
@@ -520,11 +520,11 @@ const struct wl_seat_listener seat_listener = {
 };
 
 static void
-seat_init(struct state *state, struct wl_seat *wl_seat)
+seat_init(struct window *window, struct wl_seat *wl_seat)
 {
 	struct seat *seat = calloc(1, sizeof(struct seat));
-	seat->state = state;
-	state->seat = seat;
+	seat->window = window;
+	window->seat = seat;
 	wl_seat_add_listener(wl_seat, &seat_listener, seat);
 }
 
@@ -532,19 +532,19 @@ static void
 handle_wl_registry_global(void *data, struct wl_registry *registry,
 		uint32_t name, const char *interface, uint32_t version)
 {
-	struct state *state = data;
+	struct window *window = data;
 	if (!strcmp(interface, wl_compositor_interface.name)) {
-		state->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
+		window->compositor = wl_registry_bind(registry, name, &wl_compositor_interface, 4);
 	} else if (!strcmp(interface, wl_shm_interface.name)) {
-		state->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
+		window->shm = wl_registry_bind(registry, name, &wl_shm_interface, 1);
 	} else if (!strcmp(interface, wl_seat_interface.name)) {
 		struct wl_seat *wl_seat = wl_registry_bind(registry, name, &wl_seat_interface, 7);
-		seat_init(state, wl_seat);
+		seat_init(window, wl_seat);
 	} else if (!strcmp(interface, zwlr_layer_shell_v1_interface.name)) {
-		state->layer_shell = wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 4);
+		window->layer_shell = wl_registry_bind(registry, name, &zwlr_layer_shell_v1_interface, 4);
 	} else if (!strcmp(interface, wl_output_interface.name)) {
 		struct wl_output *wl_output = wl_registry_bind(registry, name, &wl_output_interface, 4);
-		output_init(state, wl_output);
+		output_init(window, wl_output);
 	}
 }
 
@@ -561,17 +561,17 @@ static const struct wl_registry_listener registry_listener = {
 };
 
 static void
-globals_init(struct state *state)
+globals_init(struct window *window)
 {
-	struct wl_registry *registry = wl_display_get_registry(state->display);
-	wl_registry_add_listener(registry, &registry_listener, state);
+	struct wl_registry *registry = wl_display_get_registry(window->display);
+	wl_registry_add_listener(registry, &registry_listener, window);
 }
 
 static void
 display_in(int fd, short mask, void *data)
 {
-	if (wl_display_dispatch(state.display) == -1) {
-		state.run_display = false;
+	if (wl_display_dispatch(window.display) == -1) {
+		window.run_display = false;
 	}
 }
 
@@ -592,61 +592,61 @@ main(int argc, char *argv[])
 		exit(EXIT_FAILURE);
 	}
 
-	wl_list_init(&state.outputs);
+	wl_list_init(&window.outputs);
 
-	state.display = wl_display_connect(NULL);
-	DIE_ON(!state.display, "unable to connect to compositor");
+	window.display = wl_display_connect(NULL);
+	DIE_ON(!window.display, "unable to connect to compositor");
 
-	globals_init(&state);
-	wl_display_roundtrip(state.display);
-	DIE_ON(!state.compositor, "no compositor");
-	DIE_ON(!state.shm, "no shm");
-	DIE_ON(!state.seat, "no seat");
-	DIE_ON(!state.layer_shell, "no layer-shell");
+	globals_init(&window);
+	wl_display_roundtrip(window.display);
+	DIE_ON(!window.compositor, "no compositor");
+	DIE_ON(!window.shm, "no shm");
+	DIE_ON(!window.seat, "no seat");
+	DIE_ON(!window.layer_shell, "no layer-shell");
 
-	state.seat->xkb.context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
+	window.seat->xkb.context = xkb_context_new(XKB_CONTEXT_NO_FLAGS);
 
-	if (wl_display_roundtrip(state.display) == -1) {
+	if (wl_display_roundtrip(window.display) == -1) {
 		LOG(LOG_ERROR, "wl_display_roundtrip()");
 		exit(EXIT_FAILURE);
 	}
 
-	state.seat->cursor_surface =
-		wl_compositor_create_surface(state.compositor);
+	window.seat->cursor_surface =
+		wl_compositor_create_surface(window.compositor);
 
-	state.surface = calloc(1, sizeof(struct surface));
-	state.surface->state = &state;
-	state.surface->surface = wl_compositor_create_surface(state.compositor);
+	window.surface = calloc(1, sizeof(struct surface));
+	window.surface->window = &window;
+	window.surface->surface = wl_compositor_create_surface(window.compositor);
 
 	struct output *output;
-	wl_list_for_each(output, &state.outputs, link) {
-		state.surface->wl_output = output->wl_output;
+	wl_list_for_each(output, &window.outputs, link) {
+		window.surface->wl_output = output->wl_output;
 		break;
 	}
 	LOG(LOG_INFO, "using output '%s'", output->name);
 
-	surface_layer_surface_create(state.surface);
+	surface_layer_surface_create(window.surface);
 
 	const char *filename = argc > 1 ? argv[1] : NULL;
 	scene_init(filename);
 
-	state.eventloop = loop_create();
-	loop_add_fd(state.eventloop, wl_display_get_fd(state.display), POLLIN, display_in, NULL);
+	window.eventloop = loop_create();
+	loop_add_fd(window.eventloop, wl_display_get_fd(window.display), POLLIN, display_in, NULL);
 
-	state.run_display = true;
-	while (state.run_display) {
+	window.run_display = true;
+	while (window.run_display) {
 		errno = 0;
-		if (wl_display_flush(state.display) == -1 && errno != EAGAIN) {
+		if (wl_display_flush(window.display) == -1 && errno != EAGAIN) {
 			break;
 		}
-		loop_poll(state.eventloop);
+		loop_poll(window.eventloop);
 	}
 
-	scene_finish(filename, &state);
+	scene_finish(filename, &window);
 
-	surface_destroy(state.surface);
-	if (state.seat->cursor_theme) {
-		wl_cursor_theme_destroy(state.seat->cursor_theme);
+	surface_destroy(window.surface);
+	if (window.seat->cursor_theme) {
+		wl_cursor_theme_destroy(window.seat->cursor_theme);
 	}
 	pango_cairo_font_map_set_default(NULL);
 	return 0;
