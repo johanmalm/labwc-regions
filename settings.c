@@ -17,10 +17,71 @@ static struct wl_list regions;
 static xmlNode *in_region;
 static struct region *current_region;
 
+void
+convert_regions_from_percentage_to_pixels(struct window *window)
+{
+	double width = window->surface->width;
+	double height = window->surface->height;
+	struct region *region;
+	wl_list_for_each(region, &regions, link) {
+		if (region->ispercentage.x) {
+			region->dbox.x *= width;
+			region->dbox.x /= 100.0;
+			region->ispercentage.x = false;
+		}
+		if (region->ispercentage.y) {
+			region->dbox.y *= height;
+			region->dbox.y /= 100.0;
+			region->ispercentage.y = false;
+		}
+		if (region->ispercentage.width) {
+			region->dbox.width *= width;
+			region->dbox.width /= 100.0;
+			region->ispercentage.width = false;
+		}
+		if (region->ispercentage.height) {
+			region->dbox.height *= height;
+			region->dbox.height /= 100.0;
+			region->ispercentage.height = false;
+		}
+	}
+}
+
+static void
+convert_regions_from_pixels_to_percentage(struct window *window, struct wl_list *regions)
+{
+	double width = (double)window->surface->width;
+	double height = (double)window->surface->height;
+	struct region *region;
+	wl_list_for_each(region, regions, link) {
+		if (!region->ispercentage.x) {
+			region->dbox.x *= 100.0;
+			region->dbox.x /= width;
+			region->ispercentage.x = true;
+		}
+		if (!region->ispercentage.y) {
+			region->dbox.y *= 100.0;
+			region->dbox.y /= height;
+			region->ispercentage.y = true;
+		}
+		if (!region->ispercentage.width) {
+			region->dbox.width *= 100.0;
+			region->dbox.width /= width;
+			region->ispercentage.width = true;
+		}
+		if (!region->ispercentage.height) {
+			region->dbox.height *= 100.0;
+			region->dbox.height /= height;
+			region->ispercentage.height = true;
+		}
+	}
+}
 
 void
-settings_save(const char *filename)
+settings_save(const struct state *state)
 {
+	convert_regions_from_pixels_to_percentage(state->window, &regions);
+
 	struct region *region;
 	wl_list_for_each(region, &regions, link) {
 		xmlAttr *attr = region->node->properties;
@@ -41,9 +102,8 @@ settings_save(const char *filename)
 			xmlNodeSetContent(node, (const xmlChar *)buf);
 		}
 	}
-	xmlSaveFormatFile(filename, doc, 1);
+	xmlSaveFormatFile(state->config->filename, doc, 1);
 }
-
 
 /* Return xpath style nodename, e.g <a><b></b></a> becomes /a/b */
 static char *
@@ -179,12 +239,12 @@ settings_init(const char *filename)
 {
 	wl_list_init(&regions);
 
-	LIBXML_TEST_VERSION
 	xmlKeepBlanksDefault(0);
 	xmlIndentTreeOutput = 1;
 
 	if (access(filename, F_OK)) {
-		fprintf(stderr, "no file (%s)\n", filename);
+		LOG(LOG_ERROR, "no file (%s)", filename);
+		exit(EXIT_FAILURE);
 	}
 	doc = xmlReadFile(filename, NULL, 0);
 	if (!doc) {

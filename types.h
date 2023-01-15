@@ -1,7 +1,17 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 #ifndef TYPES_H
 #define TYPES_H
+#include <stdbool.h>
 #include <libxml/parser.h>
+#include <wayland-client.h>
+
+struct window;
+struct config;
+
+struct state {
+	struct window *window;
+	struct config *config;
+};
 
 struct dbox {
 	double x;

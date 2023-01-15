@@ -18,6 +18,7 @@ struct window {
 	bool run_display;
 	struct wl_display *display;
 	struct wl_compositor *compositor;
+	struct wl_registry *registry;
 	struct wl_shm *shm;
 	struct wl_list outputs;
 	struct surface *surface;
@@ -25,6 +26,8 @@ struct window {
 	struct loop *eventloop;
 	struct loop_timer *hover_timer;
 	struct zwlr_layer_shell_v1 *layer_shell;
+
+	void *data;
 };
 
 struct output {
@@ -35,7 +38,7 @@ struct output {
 	int32_t scale;
 	enum wl_output_subpixel subpixel;
 
-	struct wl_list link; /* state::outputs */
+	struct wl_list link; /* window.outputs */
 };
 
 enum pointer_event_mask {
@@ -66,6 +69,7 @@ struct pointer_event {
 struct seat {
 	struct window *window;
 
+	struct wl_seat *wl_seat;
 	struct wl_pointer *pointer;
 	struct wl_surface *cursor_surface;
 	struct wl_cursor_theme *cursor_theme;
@@ -99,5 +103,8 @@ struct surface {
 };
 
 void surface_damage(struct surface *surface);
+void window_init(struct window *window);
+void window_run(struct window *window);
+void window_finish(struct window *window);
 
 #endif /* WINDOW_H */

@@ -16,8 +16,6 @@
 #define COLOR_FG (0xCCCCCCFF)
 #define SCALE (1.0)
 
-static struct wl_list *regions;
-
 static struct {
 	int x;
 	int y;
@@ -42,67 +40,7 @@ plot_rect(cairo_t *cairo, struct dbox *box, uint32_t color, bool fill)
 }
 
 void
-convert_regions_from_pixels_to_percentage(struct window *window, struct wl_list *regions)
-{
-	double width = (double)window->surface->width;
-	double height = (double)window->surface->height;
-	struct region *region;
-	wl_list_for_each(region, regions, link) {
-		if (!region->ispercentage.x) {
-			region->dbox.x *= 100.0;
-			region->dbox.x /= width;
-			region->ispercentage.x = true;
-		}
-		if (!region->ispercentage.y) {
-			region->dbox.y *= 100.0;
-			region->dbox.y /= height;
-			region->ispercentage.y = true;
-		}
-		if (!region->ispercentage.width) {
-			region->dbox.width *= 100.0;
-			region->dbox.width /= width;
-			region->ispercentage.width = true;
-		}
-		if (!region->ispercentage.height) {
-			region->dbox.height *= 100.0;
-			region->dbox.height /= height;
-			region->ispercentage.height = true;
-		}
-	}
-}
-
-void
-convert_regions_from_percentage_to_pixels(struct window *window, struct wl_list *regions)
-{
-	double width = window->surface->width;
-	double height = window->surface->height;
-	struct region *region;
-	wl_list_for_each(region, regions, link) {
-		if (region->ispercentage.x) {
-			region->dbox.x *= width;;
-			region->dbox.x /= 100.0;
-			region->ispercentage.x = false;
-		}
-		if (region->ispercentage.y) {
-			region->dbox.y *= height;
-			region->dbox.y /= 100.0;
-			region->ispercentage.y = false;
-		}
-		if (region->ispercentage.width) {
-			region->dbox.width *= width;
-			region->dbox.width /= 100.0;
-			region->ispercentage.width = false;
-		}
-		if (region->ispercentage.height) {
-			region->dbox.height *= height;
-			region->dbox.height /= 100.0;
-			region->ispercentage.height = false;
-		}
-	}
-}
-
-void
-scene_update(cairo_t *cairo, struct window *window)
+scene_update(cairo_t *cairo, struct state *state)
 {
 	static bool has_been_converted_from_percentage;
 	if (!has_been_converted_from_percentage) {
@@ -111,7 +49,7 @@ scene_update(cairo_t *cairo, struct window *window)
 		 * configured, so at this point the surface has width/height
 		 * which is what we need to covert from percentages.
 		 */
-		convert_regions_from_percentage_to_pixels(window, regions);
+		convert_regions_from_percentage_to_pixels(state->window);
 		has_been_converted_from_percentage = true;
 	}
 
@@ -124,48 +62,19 @@ scene_update(cairo_t *cairo, struct window *window)
 
 	/* background */
 	struct dbox box = {
-		.width = window->surface->width,
-		.height = window->surface->height,
+		.width = state->window->surface->width,
+		.height = state->window->surface->height,
 	};
 	plot_rect(cairo, &box, COLOR_BG, true);
 
 	/* regions */
 	set_source_u32(cairo, COLOR_FG);
 	struct region *region;
-	wl_list_for_each(region, regions, link) {
+	wl_list_for_each(region, state->config->regions, link) {
 		plot_rect(cairo, &region->dbox, COLOR_FG, false);
 		cairo_move_to(cairo, region->dbox.x + 5, region->dbox.y + 5);
 		render_text(cairo, FONT, SCALE, region->name);
 	}
-}
-
-void
-scene_init(const char *filename)
-{
-	regions = settings_init(filename);
-}
-
-static void
-send_signal_to_labwc_pid(int signal)
-{
-	char *labwc_pid = getenv("LABWC_PID");
-	if (!labwc_pid) {
-		exit(EXIT_FAILURE);
-	}
-	int pid = atoi(labwc_pid);
-	if (!pid) {
-		exit(EXIT_FAILURE);
-	}
-	kill(pid, signal);
-}
-
-void
-scene_finish(const char *filename, struct window *window)
-{
-	convert_regions_from_pixels_to_percentage(window, regions);
-	settings_save(filename);
-	settings_finish();
-	send_signal_to_labwc_pid(SIGHUP);
 }
 
 static bool
@@ -197,13 +106,13 @@ scene_handle_cursor_motion(struct window *window, int x, int y)
 }
 
 void
-scene_handle_button_pressed(struct window *window, int x, int y)
+scene_handle_button_pressed(struct state *state, int x, int y)
 {
 	grab.x = x;
 	grab.y = y;
 
 	struct region *region;
-	wl_list_for_each(region, regions, link) {
+	wl_list_for_each(region, state->config->regions, link) {
 		if (box_contains_point(&region->dbox, x, y)) {
 			grab.region = region;
 			return;

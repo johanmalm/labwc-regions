@@ -67,6 +67,7 @@ sources = files(
   'settings.c',
   'scene.c',
   'util.c',
+  'window.c',
 )
 
 executable(
