@@ -8,7 +8,6 @@
 #include <unistd.h>
 #include <wayland-server-core.h>
 #include "settings.h"
-#include "scene.h"
 #include "util.h"
 #include "window.h"
 

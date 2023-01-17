@@ -64,8 +64,8 @@ dependencies = [
 
 sources = files(
   'main.c',
+  'microui/src/microui.c',
   'settings.c',
-  'scene.c',
   'util.c',
   'window.c',
 )
@@ -73,6 +73,7 @@ sources = files(
 executable(
   meson.project_name(),
   sources + protos_src,
+  include_directories: include_directories('microui/src'),
   dependencies: dependencies,
 )
 

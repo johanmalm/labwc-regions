@@ -3,6 +3,7 @@
 #include <assert.h>
 #include <cairo.h>
 #include <getopt.h>
+#include <linux/input-event-codes.h>
 #include <poll.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -11,12 +12,146 @@
 #include <sys/mman.h>
 #include <unistd.h>
 #include <xkbcommon/xkbcommon.h>
-#include "scene.h"
+#include "microui.h"
 #include "settings.h"
 #include "types.h"
 #include "util.h"
 #include "window.h"
 #include "wlr-layer-shell-unstable-v1-client-protocol.h"
+
+static mu_Context ctx;
+static PangoFontDescription *font_desc;
+
+static void
+update(struct state *state)
+{
+	static bool has_been_converted_from_percentage;
+	if (!has_been_converted_from_percentage) {
+		/*
+		 * update() is never called before the layer-surface is
+		 * configured, so at this point the surface has width/height
+		 * which is what we need to covert from percentages.
+		 */
+		convert_regions_from_percentage_to_pixels(state->window);
+		has_been_converted_from_percentage = true;
+	}
+
+	mu_begin(&ctx);
+	struct region *region;
+	wl_list_for_each(region, state->config->regions, link) {
+		mu_Rect r = {
+			.x = (int)round(region->dbox.x),
+			.y = (int)round(region->dbox.y),
+			.w = (int)round(region->dbox.width),
+			.h = (int)round(region->dbox.height),
+		};
+		if (mu_begin_window(&ctx, region->name, r)) {
+			mu_Container *win = mu_get_current_container(&ctx);
+
+			region->dbox.x = win->rect.x;
+			region->dbox.y = win->rect.y;
+			region->dbox.width = win->rect.w;
+			region->dbox.height = win->rect.h;
+
+			char buf[256] = { 0 };
+			snprintf(buf, sizeof(buf), "Size: %d, %d, %d, %d",
+				win->rect.x, win->rect.y, win->rect.w, win->rect.h);
+			mu_label(&ctx, buf);
+
+			/* TODO */
+//			if (mu_button(&ctx, "h-split")) {
+//				fprintf(stderr, "h-split\n");
+//			}
+//			if (mu_button(&ctx, "v-split")) {
+//				fprintf(stderr, "v-split\n");
+//			}
+			mu_end_window(&ctx);
+		}
+	}
+	mu_end(&ctx);
+}
+
+static void
+draw_rect(cairo_t *cr, mu_Rect *rect, mu_Color *color)
+{
+	cairo_save(cr);
+	cairo_set_source_rgba(cr, color->r / 255.f, color->g / 255.f,
+		color->b / 255.f, color->a / 255.f);
+	cairo_rectangle(cr, rect->x, rect->y, rect->w, rect->h);
+	cairo_fill(cr);
+	cairo_restore(cr);
+}
+
+static void
+draw_text(cairo_t *cr, mu_Vec2 *pos, mu_Color *color, const char *str)
+{
+	PangoLayout *layout = pango_cairo_create_layout(cr);
+	pango_layout_set_text(layout, str, -1);
+	pango_layout_set_font_description(layout, font_desc);
+
+	cairo_save(cr);
+	cairo_set_source_rgba(cr, color->r / 255.f, color->g / 255.f,
+		color->b / 255.f, color->a / 255.f);
+
+	pango_cairo_update_layout (cr, layout);
+
+	int width, height;
+	pango_layout_get_size (layout, &width, &height);
+	cairo_move_to (cr, pos->x, pos->y);
+	pango_cairo_show_layout (cr, layout);
+
+	cairo_restore(cr);
+	g_object_unref(layout);
+}
+
+static void
+draw(cairo_t *cr)
+{
+	/* Clear background */
+	cairo_save(cr);
+	cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
+	cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+	cairo_paint(cr);
+	cairo_restore(cr);
+
+	mu_Command *cmd = NULL;
+	while (mu_next_command(&ctx, &cmd)) {
+		switch (cmd->type) {
+		case MU_COMMAND_RECT:
+			draw_rect(cr, &cmd->rect.rect, &cmd->rect.color);
+			break;
+		case MU_COMMAND_ICON:
+			draw_rect(cr, &cmd->icon.rect, &cmd->icon.color);
+			break;
+		case MU_COMMAND_TEXT:
+			draw_text(cr, &cmd->text.pos, &cmd->text.color, cmd->text.str);
+			break;
+		case MU_COMMAND_CLIP:
+			/* fallthrough - who cares */
+		default:
+			break;
+		}
+	}
+}
+
+/* Key override */
+static void
+handle_key(struct window *window, xkb_keysym_t keysym, uint32_t codepoint)
+{
+	switch (keysym) {
+	case XKB_KEY_Up:
+	case XKB_KEY_Down:
+	case XKB_KEY_Right:
+	case XKB_KEY_Left:
+		break;
+	case XKB_KEY_Escape:
+		window->run_display = false;
+		break;
+	default:
+		break;
+	}
+	surface_damage(window->surface);
+}
 
 static void
 surface_destroy(struct surface *surface)
@@ -56,7 +191,10 @@ render_frame(struct surface *surface)
 	cairo_set_antialias(cairo, CAIRO_ANTIALIAS_BEST);
 	cairo_identity_matrix(cairo);
 
-	scene_update(cairo, (struct state *)surface->window->data);
+	update((struct state *)window->data);
+	draw(cairo);
+
+	cairo_surface_flush(buffer->surface);
 
 	wl_surface_attach(surface->surface, buffer->buffer, 0, 0);
 	wl_surface_damage_buffer(surface->surface, 0, 0, INT32_MAX, INT32_MAX);
@@ -271,7 +409,7 @@ keyboard_repeat(void *data)
 	struct window *window = seat->window;
 	seat->repeat_timer = loop_add_timer(window->eventloop,
 		seat->repeat_period_ms, keyboard_repeat, seat);
-	scene_handle_key(window, seat->repeat_sym, seat->repeat_codepoint);
+	handle_key(window, seat->repeat_sym, seat->repeat_codepoint);
 }
 
 static void
@@ -279,13 +417,13 @@ handle_wl_keyboard_key(void *data, struct wl_keyboard *wl_keyboard,
 		uint32_t serial, uint32_t time, uint32_t key, uint32_t _state)
 {
 	struct seat *seat = data;
-	struct window *window = seat->window;
 	enum wl_keyboard_key_state key_state = _state;
 	xkb_keysym_t sym = xkb_state_key_get_one_sym(seat->xkb.state, key + 8);
 	uint32_t keycode = key_state == WL_KEYBOARD_KEY_STATE_PRESSED ?  key + 8 : 0;
 	uint32_t codepoint = xkb_state_key_get_utf32(seat->xkb.state, keycode);
 	if (key_state == WL_KEYBOARD_KEY_STATE_PRESSED) {
-		scene_handle_key(window, sym, codepoint);
+		handle_key(seat->window, sym, keycode);
+		mu_input_keydown(&ctx, (int)keycode);
 	}
 
 	if (seat->repeat_timer) {
@@ -449,19 +587,38 @@ handle_wl_pointer_frame(void *data, struct wl_pointer *wl_pointer)
 	if (event->event_mask & POINTER_EVENT_MOTION) {
 		seat->pointer_x = wl_fixed_to_int(event->surface_x);
 		seat->pointer_y = wl_fixed_to_int(event->surface_y);
-		scene_handle_cursor_motion(seat->window,
-			seat->pointer_x, seat->pointer_y);
+		mu_input_mousemove(&ctx, seat->pointer_x, seat->pointer_y);
 	}
-
+	if (event->event_mask & POINTER_EVENT_AXIS) {
+		float x = wl_fixed_to_double(event->axes[WL_POINTER_AXIS_HORIZONTAL_SCROLL].value);
+		float y = wl_fixed_to_double(event->axes[WL_POINTER_AXIS_VERTICAL_SCROLL].value);
+		mu_input_scroll(&ctx, x, y);
+	}
 	if (event->event_mask & POINTER_EVENT_BUTTON) {
+		int button;
+		switch (seat->pointer_event.button) {
+		case BTN_LEFT:
+			button = MU_MOUSE_LEFT;
+			break;
+		case BTN_RIGHT:
+			button = MU_MOUSE_RIGHT;
+			break;
+		case BTN_MIDDLE:
+			button = MU_MOUSE_MIDDLE;
+			break;
+		default:
+			fprintf(stderr, "button not handled\n");
+			return;
+		}
+
 		int x = seat->pointer_x;
 		int y = seat->pointer_y;
 		switch (event->state) {
 		case WL_POINTER_BUTTON_STATE_PRESSED:
-			scene_handle_button_pressed((struct state *)seat->window->data, x, y);
+			mu_input_mousedown(&ctx, x, y, button);
 			break;
 		case WL_POINTER_BUTTON_STATE_RELEASED:
-			scene_handle_button_released(seat->window, x, y);
+			mu_input_mouseup(&ctx, x, y, button);
 			break;
 		default:
 			break;
@@ -584,6 +741,35 @@ globals_init(struct window *window)
 	DIE_ON(!window->layer_shell, "no layer-shell");
 }
 
+static int
+text_width(mu_Font font, const char *str, int len)
+{
+	if (len == -1) {
+		len = strlen(str);
+	}
+	cairo_t *cairo = cairo_create(NULL);
+	PangoContext *pango = pango_cairo_create_context(cairo);
+	PangoFontMetrics *metrics = pango_context_get_metrics(pango, font_desc, NULL);
+	int width = pango_font_metrics_get_approximate_char_width(metrics) / PANGO_SCALE;
+	pango_font_metrics_unref(metrics);
+	g_object_unref(pango);
+	cairo_destroy(cairo);
+	return width * len;
+}
+
+static int
+text_height(mu_Font font)
+{
+	cairo_t *cairo = cairo_create(NULL);
+	PangoContext *pango = pango_cairo_create_context(cairo);
+	PangoFontMetrics *metrics = pango_context_get_metrics(pango, font_desc, NULL);
+	int height = pango_font_metrics_get_height(metrics) / PANGO_SCALE;
+	pango_font_metrics_unref(metrics);
+	g_object_unref(pango);
+	cairo_destroy(cairo);
+	return height;
+}
+
 void
 window_init(struct window *window)
 {
@@ -616,6 +802,11 @@ window_init(struct window *window)
 
 	/* TODO: add option to create xdg-shell */
 	surface_layer_surface_create(window->surface);
+
+	font_desc = pango_font_description_from_string("Sans 10");
+	mu_init(&ctx);
+	ctx.text_width = text_width;
+	ctx.text_height = text_height;
 }
 
 static void
